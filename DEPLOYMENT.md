@@ -3,7 +3,7 @@
 ## Prerequisites
 - Hostinger Business/Cloud hosting plan with Node.js support
 - MySQL database (available via hPanel)
-- Domain: quizitnow.com
+- Domain: aituition.in
 
 ## Step 1: Set Up MySQL Database in hPanel
 
@@ -62,7 +62,7 @@ RAZORPAY_KEY_ID=rzp_live_xxxx
 RAZORPAY_KEY_SECRET=your_live_secret
 NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_live_xxxx
 
-NEXT_PUBLIC_APP_URL=https://quizitnow.com
+NEXT_PUBLIC_APP_URL=https://aituition.in
 ```
 
 ## Step 5: Install Dependencies & Build
@@ -92,7 +92,7 @@ The app will run on the configured port (Hostinger handles proxy).
 
 ## Step 8: Test the Deployment
 
-1. Visit `https://quizitnow.com`
+1. Visit `https://aituition.in`
 2. Test registration, login
 3. Test book upload (this calls Anthropic API — make sure the key is valid)
 4. Test Razorpay payment flow (use test keys first)
