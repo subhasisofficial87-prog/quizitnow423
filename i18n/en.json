@@ -1,0 +1,139 @@
+{
+  "nav": {
+    "logo": "QuizItNow",
+    "getStarted": "Get Started Free",
+    "language": "Language"
+  },
+  "hero": {
+    "headline": "Learn Smarter, Score Higher!",
+    "subheadline": "AI-powered study companion for Odia Board, CBSE & ICSE students. Personalized lectures, fun quizzes, and instant doubt clearing.",
+    "cta": "Start Free Trial",
+    "secondary": "See How It Works"
+  },
+  "benefits": {
+    "title": "Why Students Love QuizItNow",
+    "items": [
+      { "icon": "🧠", "title": "AI-Powered Lectures", "desc": "Personalized lessons generated from your own textbooks" },
+      { "icon": "📝", "title": "Daily Quizzes", "desc": "Smart quizzes to test your understanding every day" },
+      { "icon": "💬", "title": "Doubt Clearing", "desc": "Ask any question and get instant AI-powered answers" },
+      { "icon": "📅", "title": "200-Day Plan", "desc": "Complete study plan covering your full academic year" },
+      { "icon": "🏆", "title": "Earn Badges", "desc": "Stay motivated with streaks, badges and achievements" },
+      { "icon": "🌐", "title": "Multi-language", "desc": "Study in English, Hindi, or Odia — your choice!" }
+    ]
+  },
+  "about": {
+    "title": "What is QuizItNow?",
+    "content": "QuizItNow is an AI-powered learning platform designed for Indian school students. Upload your textbooks and let our AI create personalized daily lectures and quizzes tailored to your class level and board."
+  },
+  "aboutUs": {
+    "title": "About Us",
+    "content": "We are a team of educators and technologists passionate about making quality education accessible to every student in India, whether they study in English, Hindi, or Odia medium schools."
+  },
+  "aim": {
+    "title": "Our Aim",
+    "content": "To empower every Indian student with AI-assisted personalized learning, making exam preparation effective, engaging, and enjoyable — regardless of their location or background."
+  },
+  "boards": {
+    "title": "Choose Your Board",
+    "subtitle": "Personalized study plans for every curriculum",
+    "odia": {
+      "name": "Odia Board",
+      "desc": "BSE Odisha curriculum with Odia, Hindi & English medium support",
+      "lang": "Odia | Hindi | English"
+    },
+    "cbse": {
+      "name": "CBSE",
+      "desc": "Central Board of Secondary Education with NCERT-aligned content",
+      "lang": "English | Hindi"
+    },
+    "icse": {
+      "name": "ICSE",
+      "desc": "Indian Certificate of Secondary Education with detailed syllabus coverage",
+      "lang": "English"
+    }
+  },
+  "pricing": {
+    "title": "Simple, Affordable Plans",
+    "basic": {
+      "name": "Basic",
+      "price": "₹299",
+      "period": "/month",
+      "features": ["Unlimited lectures", "Daily quizzes", "Progress tracking", "200-day study plan", "3 books max", "Email support"]
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "₹499",
+      "period": "/month",
+      "features": ["Everything in Basic", "Unlimited books", "AI Doubt Clearing Chat", "Weekend sessions", "Priority support", "Badge system", "Multi-language support"]
+    }
+  },
+  "trial": {
+    "badge": "🎉 Free Trial",
+    "message": "First 5 days completely FREE! No credit card needed."
+  },
+  "footer": {
+    "copyright": "© 2025 QuizItNow. All rights reserved."
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Create Account",
+    "email": "Email Address",
+    "password": "Password",
+    "name": "Full Name",
+    "submit": "Continue",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "forgotPassword": "Forgot password?"
+  },
+  "dashboard": {
+    "title": "My Dashboard",
+    "upload": "Upload New Book",
+    "myBooks": "My Books",
+    "streak": "Day Streak",
+    "progress": "Progress"
+  },
+  "upload": {
+    "title": "Upload Your Book",
+    "subtitle": "Upload your textbook PDF or images to get started",
+    "pdf": "PDF File",
+    "images": "Images",
+    "class_label": "Class Level",
+    "class_placeholder": "Select your class",
+    "title_label": "Book Title (optional)",
+    "submit": "Start Learning!",
+    "processing": "Processing your book...",
+    "uploadHint": "Max 50MB. PDF or JPG/PNG images."
+  },
+  "lecture": {
+    "title": "Today's Lecture",
+    "loading": "Generating your personalized lecture...",
+    "retry": "Try Again",
+    "prev": "Previous Day",
+    "next": "Next Day",
+    "takeQuiz": "Take Quiz Now"
+  },
+  "quiz": {
+    "title": "Daily Quiz",
+    "submit": "Submit Answers",
+    "score": "Your Score",
+    "retry": "Try Again",
+    "nextLecture": "Next Lecture"
+  },
+  "doubt": {
+    "title": "Doubt Clearing",
+    "placeholder": "Ask your question here...",
+    "send": "Send",
+    "proOnly": "Doubt clearing is available for Pro plan subscribers.",
+    "upgradeNow": "Upgrade to Pro"
+  },
+  "errors": {
+    "unauthorized": "Please login to continue",
+    "notFound": "Page not found",
+    "serverError": "Something went wrong. Please try again.",
+    "trialExpired": "Your free trial has ended. Please upgrade to continue learning."
+  },
+  "trial_expired": {
+    "message": "Your 5-day free trial has ended",
+    "upgrade": "Upgrade Now to Continue"
+  }
+}
