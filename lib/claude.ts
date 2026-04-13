@@ -83,6 +83,25 @@ export interface StudyPlanResult {
   extractedText: string;
   studyPlan: object;
   syllabusTopics: string[];
+  totalDays: number;
+}
+
+// Calculate lecture days per chapter based on class level
+function getDaysPerChapter(classLevel: string): number {
+  const n = getClassNum(classLevel);
+  if (n <= 2) return 3;
+  if (n <= 5) return 5;
+  if (n <= 8) return 7;
+  return 10;
+}
+
+// Calculate total study days from chapter counts
+function calcStudyDays(uploadedChapters: number, classLevel: string): number {
+  const dpc = getDaysPerChapter(classLevel);
+  const lectureDays = uploadedChapters * dpc;
+  // Round up to full weeks (Mon–Sun = 7 days each)
+  const weeks = Math.ceil(lectureDays / 5); // 5 lecture days per week
+  return weeks * 7;
 }
 
 // Estimate PDF page count from base64 size (rough: ~50KB per page compressed)
@@ -108,7 +127,9 @@ export async function extractAndPlan(
   board: Board,
   base64Pdf?: string,
   images?: string[],
-  base64Pdfs?: string[]   // ← new: multiple PDFs
+  base64Pdfs?: string[],
+  totalChapters?: number,
+  uploadedChapters?: number,
 ): Promise<StudyPlanResult> {
   const systemPrompt = getSystemPrompt(board, classLevel, 'english');
 
@@ -193,6 +214,7 @@ Format: Return as plain text with clear chapter/section markers.`,
       extractedText: 'No content provided',
       studyPlan: { weeks: [] },
       syllabusTopics: [],
+      totalDays: 200,
     };
   }
 
@@ -216,6 +238,19 @@ Format: Return as plain text with clear chapter/section markers.`,
     extractedText = `[Creating standard ${board} Class ${classLevel} study plan.]`;
   }
 
+  // Calculate study days
+  const upCh = uploadedChapters && uploadedChapters > 0 ? uploadedChapters : null;
+  const totCh = totalChapters && totalChapters > 0 ? totalChapters : null;
+  const studyDays = upCh ? calcStudyDays(upCh, classLevel) : 200;
+  const totalWeeks = Math.ceil(studyDays / 7);
+  const dpc = getDaysPerChapter(classLevel);
+
+  const chapterContext = upCh
+    ? `The student has uploaded ${upCh} chapter${upCh > 1 ? 's' : ''}${totCh ? ` out of ${totCh} total chapters` : ''} from this book.
+Allocate ${dpc} lecture days per chapter (Mon–Fri = lecture/quiz, Sat = revision, Sun = doubt clearing).
+Total study plan: ${studyDays} days (${totalWeeks} weeks).`
+    : `Create a comprehensive 200-day study plan (Mon–Fri = lecture + quiz, Sat = revision, Sun = doubt clearing).`;
+
   // Step 2: Create study plan
   const planResponse = await withRetry(() => client.messages.create({
     model: MODEL,
@@ -224,22 +259,27 @@ Format: Return as plain text with clear chapter/section markers.`,
     messages: [
       {
         role: 'user',
-        content: `Based on this ${board} Class ${classLevel} textbook content, create a comprehensive 200-day study plan.
+        content: `Based on this ${board} Class ${classLevel} textbook content, create a study plan.
 
 Book Content Summary:
 ${extractedText.slice(0, 4000)}
 
+${chapterContext}
+
 Rules:
-- 200 weekday sessions (Monday to Friday = lecture + quiz days)
-- Saturday/Sunday = revision and doubt clearing days
+- Monday to Friday = lecture + quiz days ("type": "lecture")
+- Saturday = revision day ("type": "revision")
+- Sunday = doubt clearing day ("type": "doubt")
 - Distribute topics evenly across the weeks
 - Start from today
+- Generate exactly ${totalWeeks} weeks
 
 Return ONLY valid JSON in this exact format:
 {
   "syllabusTopics": ["topic1", "topic2", ...],
   "overview": "Brief overview of the book",
-  "totalWeeks": 40,
+  "totalWeeks": ${totalWeeks},
+  "totalDays": ${studyDays},
   "weeks": [
     {
       "week": 1,
@@ -270,7 +310,7 @@ Return ONLY valid JSON in this exact format:
   try {
     const jsonMatch = planText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { syllabusTopics?: string[]; weeks?: unknown[] };
+      const parsed = JSON.parse(jsonMatch[0]) as { syllabusTopics?: string[]; weeks?: unknown[]; totalDays?: number };
       syllabusTopics = parsed.syllabusTopics ?? [];
       studyPlan = parsed;
     }
@@ -278,7 +318,7 @@ Return ONLY valid JSON in this exact format:
     studyPlan = { weeks: [], error: 'Failed to parse plan' };
   }
 
-  return { extractedText, studyPlan, syllabusTopics };
+  return { extractedText, studyPlan, syllabusTopics, totalDays: studyDays };
 }
 
 export async function generateLecture(

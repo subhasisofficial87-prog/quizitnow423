@@ -15,13 +15,15 @@ export async function POST(request: NextRequest) {
       bookId?: number;
       fileType?: 'pdf' | 'images';
       base64Pdf?: string;
-      base64Pdfs?: string[];   // multiple PDFs
+      base64Pdfs?: string[];
       images?: string[];
       classLevel?: string;
       board?: string;
+      totalChapters?: number;
+      uploadedChapters?: number;
     };
 
-    const { bookId, fileType, base64Pdf, base64Pdfs, images, classLevel, board } = body;
+    const { bookId, fileType, base64Pdf, base64Pdfs, images, classLevel, board, totalChapters, uploadedChapters } = body;
 
     if (!bookId || !fileType || !classLevel || !board) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -41,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const boardType = board as 'odia_board' | 'cbse' | 'icse';
-      const result = await extractAndPlan(fileType, classLevel, boardType, base64Pdf, images, base64Pdfs);
+      const result = await extractAndPlan(fileType, classLevel, boardType, base64Pdf, images, base64Pdfs, totalChapters, uploadedChapters);
 
       // Update book with extracted text
       await query(
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
         [
           bookId,
           user.id,
-          200,
+          result.totalDays,
           today,
           JSON.stringify(result.syllabusTopics),
           JSON.stringify(result.studyPlan),

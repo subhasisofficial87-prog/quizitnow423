@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, FileText, Image, Loader2, Plus } from 'lucide-react';
+import { Upload, X, FileText, Image, Loader2, Plus, BookOpen, Calendar } from 'lucide-react';
 import { classLevels, classDisplayName } from '@/lib/utils';
 
 interface FileUploaderProps {
@@ -11,11 +11,31 @@ interface FileUploaderProps {
 
 type TabType = 'pdf' | 'images';
 
+// Days per chapter based on class level
+function getDaysPerChapter(classLevel: string): number {
+  const n = classLevel === 'lkg' ? 0 : classLevel === 'ukg' ? 0.5 : parseInt(classLevel) || 1;
+  if (n <= 2) return 3;   // 3 days per chapter for LKG–Class 2
+  if (n <= 5) return 5;   // 5 days for Class 3–5
+  if (n <= 8) return 7;   // 7 days for Class 6–8
+  return 10;              // 10 days for Class 9–12
+}
+
+function calcLectureDays(uploadedChapters: number, classLevel: string): number {
+  if (!uploadedChapters || uploadedChapters <= 0) return 0;
+  const dpc = getDaysPerChapter(classLevel);
+  const lectureDays = uploadedChapters * dpc;
+  // Round to full weeks (add revision + doubt days)
+  const weeks = Math.ceil(lectureDays / 5);
+  return weeks * 7; // total days incl weekends
+}
+
 export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
   const [tab, setTab] = useState<TabType>('pdf');
   const [classLevel, setClassLevel] = useState('');
   const [bookTitle, setBookTitle] = useState('');
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);   // ← multiple PDFs
+  const [totalChapters, setTotalChapters] = useState('');
+  const [uploadedChapters, setUploadedChapters] = useState('');
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
@@ -36,6 +56,12 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
       reader.onerror = reject;
     });
 
+  // Computed preview
+  const upCh = parseInt(uploadedChapters) || 0;
+  const totCh = parseInt(totalChapters) || 0;
+  const lectureDaysPreview = upCh > 0 && classLevel ? calcLectureDays(upCh, classLevel) : 0;
+  const lectureDaysPerChap = classLevel ? getDaysPerChapter(classLevel) : 5;
+
   const handleSubmit = useCallback(async () => {
     if (!classLevel) { setError('Please select a class level'); return; }
     if (tab === 'pdf' && pdfFiles.length === 0) { setError('Please select at least one PDF file'); return; }
@@ -47,12 +73,10 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
     setProgressMsg('Creating book record...');
 
     try {
-      // Determine title from first file if not set
       const autoTitle = pdfFiles.length > 1
         ? `${pdfFiles[0].name.replace('.pdf', '')} + ${pdfFiles.length - 1} more`
         : (pdfFiles[0]?.name ?? imageFiles[0]?.name ?? 'My Book');
 
-      // Create book record
       const bookRes = await fetch('/api/books', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +104,6 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
       setProgress(25);
       setStatus('processing');
 
-      // Convert files to base64
       let base64Pdfs: string[] | undefined;
       let images: string[] | undefined;
 
@@ -97,18 +120,19 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
       setProgressMsg('AI is analysing and building your study plan...');
       setProgress(60);
 
-      // Process — send all PDFs as array
       const processRes = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookId,
           fileType: tab,
-          base64Pdfs,        // array of PDFs
-          base64Pdf: base64Pdfs?.[0],  // keep backward compat with single
+          base64Pdfs,
+          base64Pdf: base64Pdfs?.[0],
           images,
           classLevel,
           board,
+          totalChapters: totCh > 0 ? totCh : undefined,
+          uploadedChapters: upCh > 0 ? upCh : undefined,
         }),
       });
 
@@ -125,7 +149,7 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Something went wrong');
     }
-  }, [tab, classLevel, bookTitle, pdfFiles, imageFiles, board, onUploadComplete]);
+  }, [tab, classLevel, bookTitle, pdfFiles, imageFiles, board, onUploadComplete, upCh, totCh]);
 
   const removePdf = (idx: number) => setPdfFiles((prev) => prev.filter((_, i) => i !== idx));
   const removeImage = (idx: number) => setImageFiles((prev) => prev.filter((_, i) => i !== idx));
@@ -181,16 +205,71 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
             type="text"
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
-            placeholder="e.g. Class 7 Science Chapters 1-5"
+            placeholder="e.g. Class 7 Science"
             disabled={isLoading}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           />
         </div>
 
+        {/* Chapter Inputs */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+              Total Chapters in Book
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={totalChapters}
+              onChange={(e) => setTotalChapters(e.target.value)}
+              placeholder="e.g. 15"
+              disabled={isLoading}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+              <Upload className="w-3.5 h-3.5 text-green-500" />
+              Chapters Uploaded
+            </label>
+            <input
+              type="number"
+              min="1"
+              max={totCh > 0 ? totCh : 100}
+              value={uploadedChapters}
+              onChange={(e) => setUploadedChapters(e.target.value)}
+              placeholder="e.g. 5"
+              disabled={isLoading}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+        </div>
+
+        {/* Live Day Preview */}
+        {upCh > 0 && classLevel && (
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-xl px-4 py-3 border border-blue-100 dark:border-blue-800 flex items-start gap-3">
+            <Calendar className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-semibold text-gray-800 dark:text-gray-200">
+                Your study plan: <span className="text-blue-600 dark:text-blue-400">{lectureDaysPreview} days</span>
+              </p>
+              <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
+                {upCh} chapters × {lectureDaysPerChap} lecture days = {upCh * lectureDaysPerChap} lecture days
+                {totCh > 0 && upCh < totCh && (
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">
+                    ({totCh - upCh} chapters remaining to upload later)
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* File Upload Area */}
         {tab === 'pdf' ? (
           <div className="space-y-3">
-            {/* Drop zone */}
             <div
               onClick={() => !isLoading && pdfInputRef.current?.click()}
               className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
@@ -214,12 +293,10 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
                 setPdfFiles((prev) => [...prev, ...files]);
-                // reset input so same file can be re-added
                 e.target.value = '';
               }}
             />
 
-            {/* PDF list */}
             {pdfFiles.length > 0 && (
               <div className="space-y-2">
                 {pdfFiles.map((f, i) => (
@@ -239,7 +316,6 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
                   </div>
                 ))}
 
-                {/* Summary bar */}
                 <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-2 text-sm">
                   <span className="text-gray-600 dark:text-gray-400 font-medium">
                     {pdfFiles.length} PDF{pdfFiles.length > 1 ? 's' : ''} selected
@@ -326,7 +402,7 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
             <p className="text-xs text-gray-500 mt-2 text-center">
               {pdfFiles.length > 1
                 ? `Processing ${pdfFiles.length} PDFs — this may take 2-5 minutes. Please don't close the page.`
-                : 'This may take 1-3 minutes. Please don\'t close the page.'}
+                : "This may take 1-3 minutes. Please don't close the page."}
             </p>
           </div>
         )}
@@ -352,7 +428,13 @@ export function FileUploader({ board, onUploadComplete }: FileUploaderProps) {
           ) : status === 'done' ? (
             '✅ Done! Redirecting...'
           ) : (
-            <>🚀 Start Learning{pdfFiles.length > 1 ? ` (${pdfFiles.length} PDFs)` : ''}!</>
+            <>
+              🚀 Start Learning
+              {lectureDaysPreview > 0
+                ? ` — ${lectureDaysPreview}-day plan`
+                : pdfFiles.length > 1 ? ` (${pdfFiles.length} PDFs)` : ''}
+              !
+            </>
           )}
         </button>
       </div>
