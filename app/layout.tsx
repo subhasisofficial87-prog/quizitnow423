@@ -3,7 +3,7 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
-  title: 'QuizItNow — AI Study Partner for Indian Students',
+  title: 'AI Tuition — AI Study Partner for Indian Students',
   description: 'AI-powered personalized lectures, quizzes, and doubt clearing for Odia Board, CBSE & ICSE students.',
   keywords: ['quiz', 'study', 'AI', 'CBSE', 'ICSE', 'Odia Board', 'online learning', 'India'],
 };

@@ -65,36 +65,92 @@ export interface StudyPlanResult {
   syllabusTopics: string[];
 }
 
+// Estimate PDF page count from base64 size (rough: ~50KB per page compressed)
+function estimatePdfPages(base64Pdf: string): number {
+  const bytes = (base64Pdf.length * 3) / 4;
+  return Math.ceil(bytes / 51200);
+}
+
+// Split base64 PDF into chunks by trimming — sends first N pages worth of data
+// Since we can't split PDF structure, we limit to ~80% of 100-page equivalent size
+function trimBase64Pdf(base64Pdf: string, maxPages = 90): string {
+  const estimatedPages = estimatePdfPages(base64Pdf);
+  if (estimatedPages <= maxPages) return base64Pdf;
+  const ratio = maxPages / estimatedPages;
+  // Round to nearest 4 chars (base64 alignment)
+  const trimmedLen = Math.floor(base64Pdf.length * ratio / 4) * 4;
+  return base64Pdf.slice(0, trimmedLen);
+}
+
 export async function extractAndPlan(
   fileType: 'pdf' | 'images',
   classLevel: string,
   board: Board,
   base64Pdf?: string,
-  images?: string[]
+  images?: string[],
+  base64Pdfs?: string[]   // ← new: multiple PDFs
 ): Promise<StudyPlanResult> {
   const systemPrompt = getSystemPrompt(board, classLevel, 'english');
 
-  // Step 1: Extract text from the book
-  let extractionContent: Anthropic.MessageParam['content'] = [];
+  // Normalise: merge base64Pdfs and legacy base64Pdf into one array
+  const allPdfs: string[] = [];
+  if (base64Pdfs && base64Pdfs.length > 0) {
+    allPdfs.push(...base64Pdfs);
+  } else if (base64Pdf) {
+    allPdfs.push(base64Pdf);
+  }
 
-  if (fileType === 'pdf' && base64Pdf) {
-    extractionContent = [
-      {
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: base64Pdf,
-        },
-      } as Anthropic.DocumentBlockParam,
-      {
-        type: 'text',
-        text: `Please extract all the text content from this ${board} Class ${classLevel} textbook/notes.
+  // Step 1: Extract text from all PDFs / images
+  let combinedExtractedText = '';
+
+  if (fileType === 'pdf' && allPdfs.length > 0) {
+    // Process each PDF separately and combine extracted text
+    for (let i = 0; i < allPdfs.length; i++) {
+      const safePdf = trimBase64Pdf(allPdfs[i], 90);
+      const extractionContent: Anthropic.MessageParam['content'] = [
+        {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: safePdf,
+          },
+        } as Anthropic.DocumentBlockParam,
+        {
+          type: 'text',
+          text: `Please extract all the text content from this ${board} Class ${classLevel} textbook/notes (document ${i + 1} of ${allPdfs.length}).
 Return the complete extracted text preserving chapter structure, headings, and key content.
 Format: Return as plain text with clear chapter/section markers.`,
-      },
-    ];
-  } else if (fileType === 'images' && images && images.length > 0) {
+        },
+      ];
+
+      try {
+        const res = await client.messages.create({
+          model: MODEL,
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: extractionContent }],
+        });
+        const text = res.content
+          .filter((b) => b.type === 'text')
+          .map((b) => (b as Anthropic.TextBlock).text)
+          .join('\n');
+        combinedExtractedText += (i > 0 ? '\n\n--- Document ' + (i + 1) + ' ---\n\n' : '') + text;
+      } catch (extractError) {
+        const errMsg = extractError instanceof Error ? extractError.message : '';
+        if (errMsg.includes('maximum') && errMsg.includes('PDF pages')) {
+          combinedExtractedText += `\n\n[Document ${i + 1} too large — skipped. Max 100 pages per PDF.]\n\n`;
+        } else {
+          throw extractError;
+        }
+      }
+    }
+  }
+
+  // Store for legacy path below
+  let extractionContent: Anthropic.MessageParam['content'] = [];
+
+  if (fileType === 'images' && images && images.length > 0) {
     const imageBlocks: Anthropic.ImageBlockParam[] = images.slice(0, 20).map((img) => ({
       type: 'image',
       source: {
@@ -112,7 +168,7 @@ Return the complete extracted text preserving chapter structure, headings, and k
 Format: Return as plain text with clear chapter/section markers.`,
       },
     ];
-  } else {
+  } else if (fileType !== 'pdf') {
     return {
       extractedText: 'No content provided',
       studyPlan: { weeks: [] },
@@ -120,17 +176,29 @@ Format: Return as plain text with clear chapter/section markers.`,
     };
   }
 
-  const extractionResponse = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: extractionContent }],
-  });
+  let extractedText = combinedExtractedText;
 
-  const extractedText = extractionResponse.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('\n');
+  // For images, we still need to call Claude to extract text
+  if (fileType === 'images' && extractionContent.length > 0) {
+    try {
+      const extractionResponse = await client.messages.create({
+        model: MODEL,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: extractionContent }],
+      });
+      extractedText = extractionResponse.content
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as Anthropic.TextBlock).text)
+        .join('\n');
+    } catch (extractError) {
+      throw extractError;
+    }
+  }
+
+  if (!extractedText) {
+    extractedText = `[Creating standard ${board} Class ${classLevel} study plan.]`;
+  }
 
   // Step 2: Create study plan
   const planResponse = await client.messages.create({

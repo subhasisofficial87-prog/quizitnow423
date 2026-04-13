@@ -15,12 +15,13 @@ export async function POST(request: NextRequest) {
       bookId?: number;
       fileType?: 'pdf' | 'images';
       base64Pdf?: string;
+      base64Pdfs?: string[];   // multiple PDFs
       images?: string[];
       classLevel?: string;
       board?: string;
     };
 
-    const { bookId, fileType, base64Pdf, images, classLevel, board } = body;
+    const { bookId, fileType, base64Pdf, base64Pdfs, images, classLevel, board } = body;
 
     if (!bookId || !fileType || !classLevel || !board) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const boardType = board as 'odia_board' | 'cbse' | 'icse';
-      const result = await extractAndPlan(fileType, classLevel, boardType, base64Pdf, images);
+      const result = await extractAndPlan(fileType, classLevel, boardType, base64Pdf, images, base64Pdfs);
 
       // Update book with extracted text
       await query(
@@ -64,14 +65,18 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ success: true, bookId });
     } catch (aiError) {
+      const errMsg = aiError instanceof Error ? aiError.message : 'AI processing failed';
+      const userMsg = errMsg.includes('PDF pages')
+        ? 'PDF has too many pages (max 100). Please upload a shorter document.'
+        : 'AI processing failed. Please try again.';
       await query(
         'UPDATE books SET processing_status = ?, error_message = ? WHERE id = ?',
-        ['failed', aiError instanceof Error ? aiError.message : 'AI processing failed', bookId]
+        ['failed', userMsg, bookId]
       );
-      throw aiError;
+      return NextResponse.json({ error: userMsg }, { status: 422 });
     }
   } catch (err) {
     console.error('Process error:', err);
-    return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Processing failed. Please try again.' }, { status: 500 });
   }
 }
