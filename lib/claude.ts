@@ -3,9 +3,29 @@ import type { QuizQuestion } from '@/types';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  maxRetries: 3,          // auto-retry on 529 overloaded / 529 / 529
+  timeout: 120_000,       // 2 min timeout per request
 });
 
 const MODEL = 'claude-sonnet-4-5';
+
+// Helper: retry wrapper for overloaded errors
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 5000): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const isOverloaded = e instanceof Error &&
+        (e.message.includes('529') || e.message.includes('overloaded') || e.message.toLowerCase().includes('overload'));
+      if (isOverloaded && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
 
 type Language = 'english' | 'hindi' | 'odia';
 type Board = 'odia_board' | 'cbse' | 'icse';
@@ -125,12 +145,12 @@ Format: Return as plain text with clear chapter/section markers.`,
       ];
 
       try {
-        const res = await client.messages.create({
+        const res = await withRetry(() => client.messages.create({
           model: MODEL,
           max_tokens: 8192,
           system: systemPrompt,
           messages: [{ role: 'user', content: extractionContent }],
-        });
+        }));
         const text = res.content
           .filter((b) => b.type === 'text')
           .map((b) => (b as Anthropic.TextBlock).text)
@@ -180,20 +200,16 @@ Format: Return as plain text with clear chapter/section markers.`,
 
   // For images, we still need to call Claude to extract text
   if (fileType === 'images' && extractionContent.length > 0) {
-    try {
-      const extractionResponse = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: extractionContent }],
-      });
-      extractedText = extractionResponse.content
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as Anthropic.TextBlock).text)
-        .join('\n');
-    } catch (extractError) {
-      throw extractError;
-    }
+    const extractionResponse = await withRetry(() => client.messages.create({
+      model: MODEL,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: extractionContent }],
+    }));
+    extractedText = extractionResponse.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as Anthropic.TextBlock).text)
+      .join('\n');
   }
 
   if (!extractedText) {
@@ -201,7 +217,7 @@ Format: Return as plain text with clear chapter/section markers.`,
   }
 
   // Step 2: Create study plan
-  const planResponse = await client.messages.create({
+  const planResponse = await withRetry(() => client.messages.create({
     model: MODEL,
     max_tokens: 8192,
     system: systemPrompt,
@@ -241,7 +257,7 @@ Return ONLY valid JSON in this exact format:
 }`,
       },
     ],
-  });
+  }));
 
   const planText = planResponse.content
     .filter((b) => b.type === 'text')
@@ -281,7 +297,7 @@ export async function generateLecture(
       ? 'Create a 15-20 minute story-based lesson with fun activities and examples.'
       : 'Create a comprehensive 30-minute structured lesson covering all key points.';
 
-  const response = await client.messages.create({
+  const response = await withRetry(() => client.messages.create({
     model: MODEL,
     max_tokens: 4096,
     system: systemPrompt,
@@ -305,7 +321,7 @@ Structure your lesson with:
 Make it engaging and educational for Class ${classLevel} students.`,
       },
     ],
-  });
+  }));
 
   return response.content
     .filter((b) => b.type === 'text')
@@ -331,7 +347,7 @@ export async function generateQuiz(
     questionSpec = '5 MCQ questions with 4 options each, and 2 short answer questions.';
   }
 
-  const response = await client.messages.create({
+  const response = await withRetry(() => client.messages.create({
     model: MODEL,
     max_tokens: 2048,
     system: `You are creating a quiz for Class ${classLevel} students. ${language !== 'english' ? `Write in ${language}.` : ''}`,
@@ -363,7 +379,7 @@ Return ONLY valid JSON array:
 ]`,
       },
     ],
-  });
+  }));
 
   const text = response.content
     .filter((b) => b.type === 'text')
@@ -442,12 +458,12 @@ export async function doubtChat(
     },
   ];
 
-  const response = await client.messages.create({
+  const response = await withRetry(() => client.messages.create({
     model: MODEL,
     max_tokens: classNum <= 4 ? 1024 : 2048,
     system: `${systemPrompt}\n\nYou are answering doubts and questions from students. Be patient, clear, and encouraging.`,
     messages,
-  });
+  }));
 
   return response.content
     .filter((b) => b.type === 'text')
